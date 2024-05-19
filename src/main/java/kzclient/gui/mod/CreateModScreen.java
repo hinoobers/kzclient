@@ -37,15 +37,23 @@ public class CreateModScreen extends GuiScreen {
         this.nameField.setFocused(true);
         this.nameField.setCanLoseFocus(true);
         this.nameField.setMaxStringLength(32);
+        if(NAME != null)
+            this.nameField.setText(NAME);
 
         this.authorField = new GuiTextField(1, this.fontRendererObj, this.width / 2 - 100, 130, 200, 20);
         this.authorField.setMaxStringLength(32);
+        if(AUTHOR != null)
+            this.authorField.setText(AUTHOR);
 
         this.versionField = new GuiTextField(2, this.fontRendererObj, this.width / 2 - 100, 160, 200, 20);
         this.versionField.setMaxStringLength(32);
+        if(VERSION != null)
+            this.versionField.setText(VERSION);
 
         this.descriptionField = new GuiTextField(3, this.fontRendererObj, this.width / 2 - 100, 190, 200, 20);
         this.descriptionField.setMaxStringLength(128);
+        if(DESCRIPTION != null)
+            this.descriptionField.setText(DESCRIPTION);
 
 
 

@@ -1,10 +1,10 @@
 package kzclient.mod.functions.impl.event;
 
 import kzclient.mod.functions.ModFunction;
-import kzclient.mod.functions.point.FromPoint;
-import kzclient.mod.functions.point.ToPoint;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreen;
+
+import kzclient.mod.functions.Point;
 
 import java.awt.*;
 
@@ -19,7 +19,7 @@ public class PreTick extends ModFunction {
         Gui.drawRect(x, y, x + this.width, y + this.height, Color.black.getRGB());
 
         for (int i = 0; i < this.from.size(); i++) {
-            FromPoint from = this.from.get(i);
+            kzclient.mod.functions.Point from = this.from.get(i);
             from.x = x;
             from.y = y + (i * 20); // Adjust the y-coordinate based on the index
             from.width = 10;
@@ -29,11 +29,12 @@ public class PreTick extends ModFunction {
 
         // Draw ToPoints
         for (int i = 0; i < this.to.size(); i++) {
-            ToPoint to = this.to.get(i);
+            Point to = this.to.get(i);
             to.width = 10;
             to.height = 10;
             to.x = x + this.width - to.width;
             to.y = y + (i * 20); // Adjust the y-coordinate based on the index
+
             Gui.drawRect(to.x, to.y, to.x + to.width, to.y + to.height, Color.green.getRGB());
         }
 
@@ -58,16 +59,6 @@ public class PreTick extends ModFunction {
         // do nothing
     }
 
-    @Override
-    public String _serialize() {
-        return null;
-    }
-
-    @Override
-    public void _deserialize(String data) {
-
-    }
-
 
     @Override
     public PreTick _copy() {
@@ -86,9 +77,6 @@ public class PreTick extends ModFunction {
 
     @Override
     public void _init() {
-        this.to.add(new ToPoint(this));
-
-        this.width = 100;
-        this.height = 100;
+        this.to.add(new Point(this, Point.PointType.TO_POINT));
     }
 }

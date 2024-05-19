@@ -1,6 +1,7 @@
 package kzclient.mod;
 
 import kzclient.KZClient;
+import kzclient.mod.functions.FunctionManager;
 import kzclient.mod.functions.ModFunction;
 import kzclient.mod.functions.impl.IsSprinting;
 import kzclient.mod.functions.impl.StartSprinting;
@@ -8,6 +9,7 @@ import kzclient.mod.functions.impl.event.PreTick;
 import kzclient.mod.functions.impl.event.StartSprintingEvent;
 import kzclient.util.SerializeUtil;
 import lombok.Getter;
+import org.bspfsystems.yamlconfiguration.file.YamlConfiguration;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.File;
@@ -37,30 +39,42 @@ public class Mod {
                 modFolder.mkdir();
             }
 
-            // save to yaml
-            Yaml yaml = new Yaml();
-            // only store name, author, version, and description
-            Map<String, String> data = new HashMap<>();
-            data.put("name", this.name);
-            data.put("author", this.author);
-            data.put("version", this.version);
-            data.put("description", this.description);
-            yaml.dump(data, Files.newBufferedWriter(new File(modFolder, "info.yaml").toPath()));
+            File info = new File(modFolder, "info.yaml");
+            if(!info.exists()) {
+                info.createNewFile();
+            }
+
+            YamlConfiguration config = YamlConfiguration.loadConfiguration(info);
+            config.set("name", this.name);
+            config.set("author", this.author);
+            config.set("version", this.version);
+            config.set("description", this.description);
+            config.save(info);
+
 
             File functions = new File(modFolder, "functions.kz");
             if(!functions.exists()) {
                 functions.createNewFile();
             }
-            PrintWriter writer = new PrintWriter(functions);
-
-            writer.println(this.functions.size());
+            YamlConfiguration functionsConfig = YamlConfiguration.loadConfiguration(functions);
+            functionsConfig.set("functions", null);
+            Map<String, ModFunction> functionIdList = new HashMap<>(); // generate random unique id for each function
             for(ModFunction function : this.functions) {
-                writer.println(function.serialize());
+                String id = UUID.randomUUID().toString().replaceAll("-", "").toLowerCase();
+                while (functionIdList.containsKey(id))
+                    id = UUID.randomUUID().toString().replaceAll("-", "").toLowerCase();
+                functionIdList.put(id, function);
             }
-            writer.flush();
-            writer.close();
+
+            for(Map.Entry<String, ModFunction> entry : functionIdList.entrySet()) {
+                functionsConfig.createSection("functions." + entry.getKey());
+                entry.getValue().save(functionsConfig.getConfigurationSection("functions." + entry.getKey()));
+            }
+
+            functionsConfig.save(functions);
         } catch(IOException e){
             KZClient.getLogger().severe("Failed to save mod: " + this.name);
+            e.printStackTrace();
         }
     }
 
@@ -74,39 +88,16 @@ public class Mod {
             return;
         }
 
-        try {
-            Scanner scanner = new Scanner(functions);
-            int size = scanner.nextInt();
-            scanner.nextLine(); // Consume newline character
-            for (int i = 0; i < size; i++) {
-                String data = scanner.nextLine();
-                String[] datad = SerializeUtil.deserialize(data).split("=!");
-                ModFunction function;
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(functions);
+        if(!config.contains("functions")) {
+            KZClient.getLogger().info("No functions found for mod: " + this.name);
+            return;
+        }
 
-                System.out.println(datad[0].toLowerCase());
-                switch (datad[0].toLowerCase()) {
-                    case "startsprintingevent":
-                        function = new StartSprintingEvent();
-                        break;
-                    case "pretick":
-                        function = new PreTick();
-                        break;
-                    case "startsprinting":
-                        function = new StartSprinting();
-                        break;
-                    case "issprinting":
-                        function = new IsSprinting();
-                        break;
-                    default:
-                        KZClient.getLogger().severe("Failed to load function for mod: " + this.name + " (Unknown function: " + datad[0] + ")");
-                        continue;
-                }
-
-                function.deserialize(data);
-                this.functions.add(function);
-            }
-        } catch(IOException e) {
-            KZClient.getLogger().severe("Failed to lo");
+        for(String key : config.getConfigurationSection("functions").getKeys(false)) {
+            ModFunction function = FunctionManager.getFunction(config.getInt("functions." + key + ".id"));
+            function.deserialize(config.getConfigurationSection("functions." + key));
+            this.functions.add(function);
         }
 
     }

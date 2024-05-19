@@ -9,16 +9,13 @@ import kzclient.mod.functions.impl.StartSprinting;
 import kzclient.mod.functions.impl.event.PreTick;
 import kzclient.mod.functions.impl.SayMessage;
 import kzclient.mod.functions.impl.event.StartSprintingEvent;
-import kzclient.mod.functions.point.FromPoint;
-import kzclient.mod.functions.point.Point;
-import kzclient.mod.functions.point.ToPoint;
+import kzclient.mod.functions.Point;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.*;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.WorldRenderer;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
-import net.minecraft.util.MathHelper;
 import org.lwjgl.input.Mouse;
 
 import java.awt.*;
@@ -28,6 +25,8 @@ import java.util.Arrays;
 import java.util.List;
 
 public class SketchModScreen extends GuiScreen {
+
+    // TODO: Dragging & clicking from the browser has a bug while you pan
 
     private final GuiScreen parent;
     private Mod editingMod = null; // NULL if creating
@@ -41,6 +40,8 @@ public class SketchModScreen extends GuiScreen {
     private Point draggingFrom;
     private ModFunction draggingFunction;
     private boolean creating = false;
+
+    private final int browserWidth = 135;
 
     public SketchModScreen(GuiScreen parent) {
         this.parent = parent;
@@ -59,7 +60,7 @@ public class SketchModScreen extends GuiScreen {
         this.buttonList.add(new GuiButton(0, 10, this.height - 30, 100, 20, "Back"));
         // finish button
         this.buttonList.add(new GuiButton(1, this.width - 110, this.height - 30, 100, 20, "Finish"));
-        this.functionList = new ModFunctionElementList(this.mc, 135, this.height, 0, this.height, 110);
+        this.functionList = new ModFunctionElementList(this.mc, this.browserWidth, this.height, 0, this.height, 110);
     }
 
     @Override
@@ -75,21 +76,23 @@ public class SketchModScreen extends GuiScreen {
             dragging.draw(this, adjustedMouseX - offsetX, adjustedMouseY - offsetY, adjustedMouseX, adjustedMouseY);
         }
 
+
         for (ModFunction function : currentFunctions) {
             if (function.equals(dragging)) continue;
+            function.draw(this, function.x + panX, function.y + panY, adjustedMouseX, adjustedMouseY);
 
-            for (FromPoint from : function.from) {
+            for (Point from : function.from) {
                 for (Point to : from.connections) {
                     drawConnection(from, to);
                 }
             }
-            for (ToPoint to : function.to) {
+            for (Point to : function.to) {
                 for (Point from : to.connections) {
+                    System.out.println("Drawing connection from (" + from.x + "," + from.y + ") to (" + to.x + "," + to.y + ")");
                     drawConnection(from, to);
                 }
             }
 
-            function.draw(this, function.x + panX, function.y + panY, adjustedMouseX, adjustedMouseY);
         }
 
         super.drawScreen(mouseX, mouseY, partialTicks);
@@ -119,11 +122,7 @@ public class SketchModScreen extends GuiScreen {
             for (ModFunction function : currentFunctions) {
                 Point pointAtMouse = function.getPointAt(mouseX, mouseY);
                 if (pointAtMouse != null) {
-                    if (draggingFrom instanceof FromPoint) {
-                        ((FromPoint) draggingFrom).connections.add(pointAtMouse);
-                    } else if (draggingFrom instanceof ToPoint) {
-                        ((ToPoint) draggingFrom).connections.add(pointAtMouse);
-                    }
+                    draggingFrom.connections.add(pointAtMouse);
                     draggingPoint = false;
                     break;
                 }
@@ -168,7 +167,7 @@ public class SketchModScreen extends GuiScreen {
                 break;
             }
         }
-        if(!clicked) {
+        if(!clicked && mouseX > browserWidth) {
             panning = true;
             draggingPoint = false;
         }
@@ -251,6 +250,7 @@ public class SketchModScreen extends GuiScreen {
 
         @Override
         protected void drawSlot(int entryID, int p_180791_2_, int p_180791_3_, int p_180791_4_, int mouseXIn, int mouseYIn) {
+            functions.get(entryID).to.clear(); functions.get(entryID).from.clear(); // For display, clear it because #init adds them.
             functions.get(entryID).init();
             functions.get(entryID).draw(SketchModScreen.this, 15, p_180791_3_, mouseXIn, p_180791_4_);
         }

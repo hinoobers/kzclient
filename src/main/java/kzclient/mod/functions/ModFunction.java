@@ -1,21 +1,19 @@
 package kzclient.mod.functions;
 
-import kzclient.mod.functions.point.FromPoint;
-import kzclient.mod.functions.point.Point;
-import kzclient.mod.functions.point.ToPoint;
 import kzclient.util.SerializeUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
+import org.bspfsystems.yamlconfiguration.configuration.ConfigurationSection;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public abstract class ModFunction {
 
-    public final List<FromPoint> from = new ArrayList<>();
-    public final List<ToPoint> to = new ArrayList<>();
-    public int x, y, width, height;
+    public final List<Point> from = new ArrayList<>();
+    public final List<Point> to = new ArrayList<>();
+    public int x, y, width = 100, height = 100;
     protected final FontRenderer fontRenderer = Minecraft.getMinecraft().fontRendererObj;
 
     public ModFunction() {
@@ -29,69 +27,44 @@ public abstract class ModFunction {
     public abstract ModFunction _copy();
     public abstract void fire();
 
-    public abstract String _serialize();
-    public abstract void _deserialize(String data);
 
-    public String serialize() {
-        StringBuilder builder = new StringBuilder();
-        builder.append(this.getClass().getSimpleName());
-        builder.append("=!");
-        builder.append(this.x);
-        builder.append("=!");
-        builder.append(this.y);
-        builder.append("=!");
-        builder.append(this.width);
-        builder.append("=!");
-        builder.append(this.height);
-        builder.append("=!");
-        // points
-        builder.append(this.from.size());
-        builder.append("=!");
-        for (FromPoint point : this.from) {
-            builder.append(point.serialize());
-            builder.append("=!");
+    public void save(ConfigurationSection section) {
+        section.set("id", FunctionManager.getFunctionId(this));
+        section.set("x", this.x);
+        section.set("y", this.y);
+        section.set("width", this.width);
+        section.set("height", this.height);
+        section.set("fromSize", this.from.size());
+        for (int i = 0; i < this.from.size(); i++) {
+            this.from.get(i).save(section.createSection("from." + i));
         }
-        builder.append(this.to.size());
-        builder.append("=!");
-        for (ToPoint point : this.to) {
-            builder.append(point.serialize());
-            builder.append("=!");
+        section.set("toSize", this.to.size());
+        for (int i = 0; i < this.to.size(); i++) {
+            this.to.get(i).save(section.createSection("to." + i));
         }
-        return SerializeUtil.serialize(builder.toString());
     }
 
-    public void deserialize(String data) {
-        String[] parts = SerializeUtil.deserialize(data).split("=!");
-        // skip first part
-
-        this.x = Integer.parseInt(parts[1]);
-        this.y = Integer.parseInt(parts[2]);
-        this.width = Integer.parseInt(parts[3]);
-        this.height = Integer.parseInt(parts[4]);
-        // points
-        int fromSize = Integer.parseInt(parts[5]);
-        System.out.println("From size: " + fromSize);
-        int index = 6;
-        for (int i = 0; i < fromSize; i++) {
-            FromPoint point = new FromPoint(this);
-            point.deserialize(parts[index]);
+    public void deserialize(ConfigurationSection section) {
+        this.x = section.getInt("x");
+        this.y = section.getInt("y");
+        this.width = section.getInt("width");
+        this.height = section.getInt("height");
+        int from = section.getInt("fromSize");
+        for (int i = 0; i < from; i++) {
+            Point point = new Point(this, Point.PointType.FROM_POINT);
+            point.deserialize(section.getConfigurationSection("from." + i));
             this.from.add(point);
-            index++;
         }
-        int toSize = Integer.parseInt(parts[index]);
-        System.out.println("To size: " + toSize);
-        index++;
-        for (int i = 0; i < toSize; i++) {
-            ToPoint point = new ToPoint(this);
-            point.deserialize(parts[index]);
+        int to = section.getInt("toSize");
+        for (int i = 0; i < to; i++) {
+            Point point = new Point(this, Point.PointType.TO_POINT);
+            point.deserialize(section.getConfigurationSection("to." + i));
             this.to.add(point);
-            index++;
         }
     }
 
     public void init() {
-        this.to.clear();
-        this.from.clear();
+
         this._init();
     }
 
@@ -103,12 +76,12 @@ public abstract class ModFunction {
     }
 
     public Point getPointAt(int mouseX, int mouseY) {
-        for (FromPoint point : from) {
+        for (Point point : from) {
             if (point.isMouseOver(mouseX, mouseY)) {
                 return point;
             }
         }
-        for (ToPoint point : to) {
+        for (Point point : to) {
             if (point.isMouseOver(mouseX, mouseY)) {
                 return point;
             }

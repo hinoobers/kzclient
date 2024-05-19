@@ -1,8 +1,7 @@
 package kzclient.mod.functions.impl;
 
 import kzclient.mod.functions.ModFunction;
-import kzclient.mod.functions.point.FromPoint;
-import kzclient.mod.functions.point.ToPoint;
+import kzclient.mod.functions.Point;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreen;
@@ -11,8 +10,8 @@ import java.awt.*;
 
 public class IsSprinting extends ModFunction {
 
-    private ToPoint yes;
-    private ToPoint no;
+    private Point yes;
+    private Point no;
 
     public IsSprinting() {
 
@@ -23,7 +22,7 @@ public class IsSprinting extends ModFunction {
         Gui.drawRect(x, y, x + this.width, y + this.height, Color.black.getRGB());
 
         for (int i = 0; i < this.from.size(); i++) {
-            FromPoint from = this.from.get(i);
+            Point from = this.from.get(i);
             from.x = x;
             from.y = y + (i * 20); // Adjust the y-coordinate based on the index
             from.width = 10;
@@ -33,7 +32,7 @@ public class IsSprinting extends ModFunction {
 
         // Draw ToPoints
         for (int i = 0; i < this.to.size(); i++) {
-            ToPoint to = this.to.get(i);
+            Point to = this.to.get(i);
             to.width = 10;
             to.height = 10;
             to.x = x + this.width - to.width;
@@ -67,16 +66,6 @@ public class IsSprinting extends ModFunction {
     }
 
     @Override
-    public String _serialize() {
-        return null;
-    }
-
-    @Override
-    public void _deserialize(String data) {
-
-    }
-
-    @Override
     public IsSprinting _copy() {
         IsSprinting copy = new IsSprinting();
         copy.x = this.x;
@@ -93,13 +82,10 @@ public class IsSprinting extends ModFunction {
 
     @Override
     public void _init() {
-        this.from.add(new FromPoint(this));
-        this.to.add(yes = new ToPoint(this));
-        this.to.add(no = new ToPoint(this));
+        this.from.add(new Point(this, Point.PointType.FROM_POINT));
+        this.to.add(yes = new Point(this, Point.PointType.TO_POINT));
+        this.to.add(no = new Point(this, Point.PointType.TO_POINT));
         yes.color = Color.green.getRGB();
         no.color = Color.red.getRGB();
-
-        this.width = 100;
-        this.height = 100;
     }
 }
