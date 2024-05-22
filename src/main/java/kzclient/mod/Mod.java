@@ -1,13 +1,8 @@
 package kzclient.mod;
 
 import kzclient.KZClient;
-import kzclient.mod.functions.FunctionManager;
-import kzclient.mod.functions.ModFunction;
-import kzclient.mod.functions.impl.IsSprinting;
-import kzclient.mod.functions.impl.StartSprinting;
-import kzclient.mod.functions.impl.event.PreTick;
-import kzclient.mod.functions.impl.event.StartSprintingEvent;
-import kzclient.util.SerializeUtil;
+import kzclient.mod.function.FunctionManager;
+import kzclient.mod.function.ModFunction;
 import lombok.Getter;
 import org.bspfsystems.yamlconfiguration.file.YamlConfiguration;
 import org.yaml.snakeyaml.Yaml;
@@ -21,7 +16,7 @@ import java.util.*;
 public class Mod {
 
     @Getter private String id, name, author, version, description;
-    private List<ModFunction> functions = new ArrayList<>();
+    private final Map<Integer, ModFunction> functions = new HashMap<>();
 
     public Mod(String id, String name, String author, String version, String description) {
         this.id = id;
@@ -57,17 +52,10 @@ public class Mod {
                 functions.createNewFile();
             }
             YamlConfiguration functionsConfig = YamlConfiguration.loadConfiguration(functions);
-            functionsConfig.set("functions", null);
-            Map<String, ModFunction> functionIdList = new HashMap<>(); // generate random unique id for each function
-            for(ModFunction function : this.functions) {
-                String id = UUID.randomUUID().toString().replaceAll("-", "").toLowerCase();
-                while (functionIdList.containsKey(id))
-                    id = UUID.randomUUID().toString().replaceAll("-", "").toLowerCase();
-                functionIdList.put(id, function);
-            }
 
-            for(Map.Entry<String, ModFunction> entry : functionIdList.entrySet()) {
+            for(Map.Entry<Integer, ModFunction> entry : this.functions.entrySet()) {
                 functionsConfig.createSection("functions." + entry.getKey());
+                functionsConfig.set("functions." + entry.getKey() + ".id", FunctionManager.getFunctionId(entry.getValue()));
                 entry.getValue().save(functionsConfig.getConfigurationSection("functions." + entry.getKey()));
             }
 
@@ -78,8 +66,20 @@ public class Mod {
         }
     }
 
+    // This is for a new mod
     public void loadFunctions(List<ModFunction> functions) {
-        this.functions = functions;
+        for(ModFunction function : functions) {
+            if(function.getUniqueId() == null) {
+                int id = -6969 + (this.functions.size());
+                while(this.functions.containsKey(id)) {
+                    id++;
+                }
+                function.setUniqueId(id);
+            }
+            function.setId(FunctionManager.getFunctionId(function));
+            function.setMod(this);
+            this.functions.put(function.getUniqueId(), function);
+        }
     }
 
     public void loadFunctions() {
@@ -96,13 +96,29 @@ public class Mod {
 
         for(String key : config.getConfigurationSection("functions").getKeys(false)) {
             ModFunction function = FunctionManager.getFunction(config.getInt("functions." + key + ".id"));
+            function.setMod(this);
+            function.setUniqueId(Integer.parseInt(key));
+            //function.loadSlots(); saved in deserialize (might change it later on how it handles)
+            function.prepare();
             function.deserialize(config.getConfigurationSection("functions." + key));
-            this.functions.add(function);
+
+            this.functions.put(Integer.parseInt(key), function);
+            function.setId(FunctionManager.getFunctionId(function));
         }
 
+        // post-load, so all functions are loaded & found
+        for(ModFunction function : this.functions.values()) {
+            function.getOutputs().forEach(e -> e.deserialize(config.getConfigurationSection("functions." + function.getUniqueId() + ".output." + e.uniqueId)));
+            function.getInputs().forEach(e -> e.deserialize(config.getConfigurationSection("functions." + function.getUniqueId() + ".input." + e.uniqueId)));
+        }
+
+        System.out.println("Functions");
+        for(Map.Entry<Integer, ModFunction> entry : this.functions.entrySet()) {
+            System.out.println(entry.getKey() + " - " + entry.getValue().getId());
+        }
     }
 
     public Collection<ModFunction> getFunctions() {
-        return Collections.unmodifiableCollection(this.functions);
+        return Collections.unmodifiableCollection(this.functions.values());
     }
 }

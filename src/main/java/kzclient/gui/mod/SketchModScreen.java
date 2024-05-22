@@ -3,13 +3,17 @@ package kzclient.gui.mod;
 import kzclient.KZClient;
 import kzclient.gui.KZScreen;
 import kzclient.mod.Mod;
-import kzclient.mod.functions.ModFunction;
-import kzclient.mod.functions.impl.IsSprinting;
-import kzclient.mod.functions.impl.StartSprinting;
-import kzclient.mod.functions.impl.event.PreTick;
-import kzclient.mod.functions.impl.SayMessage;
-import kzclient.mod.functions.impl.event.StartSprintingEvent;
-import kzclient.mod.functions.Point;
+import kzclient.mod.function.ConnectionLine;
+import kzclient.mod.function.ModFunction;
+import kzclient.mod.function.impl.SayMessageFunction;
+import kzclient.mod.function.impl.TestFunction;
+import kzclient.mod.function.impl.event.ChatMessageFunction;
+import kzclient.mod.function.impl.event.PostMotionFunction;
+import kzclient.mod.function.impl.string.ContainsFunction;
+import kzclient.mod.function.slot.InputSlot;
+import kzclient.mod.function.slot.OutputSlot;
+import kzclient.mod.function.slot.Slot;
+import kzclient.util.MathHelper;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.*;
 import net.minecraft.client.renderer.GlStateManager;
@@ -26,22 +30,25 @@ import java.util.List;
 
 public class SketchModScreen extends GuiScreen {
 
-    // TODO: Dragging & clicking from the browser has a bug while you pan
-
     private final GuiScreen parent;
     private Mod editingMod = null; // NULL if creating
     private ModFunctionElementList functionList;
     private final List<ModFunction> currentFunctions = new ArrayList<>();
     private ModFunction dragging;
     private int offsetX, offsetY;
-    private int panX = 0, panY = 0;
     private int lastMouseX, lastMouseY;
-    private boolean panning, draggingPoint;
-    private Point draggingFrom;
+    private boolean draggingPoint;
+    private OutputSlot draggingFrom;
     private ModFunction draggingFunction;
     private boolean creating = false;
 
     private final int browserWidth = 135;
+
+    private int panOffsetX = 0;
+    private int panOffsetY = 0;
+    private int lastPanX = 0;
+    private int lastPanY = 0;
+    private boolean isPanning = false;
 
     public SketchModScreen(GuiScreen parent) {
         this.parent = parent;
@@ -52,6 +59,8 @@ public class SketchModScreen extends GuiScreen {
         this.parent = parent;
         this.currentFunctions.addAll(mod.getFunctions());
         this.editingMod = mod;
+
+        System.out.println("Sketch screen, functions=" + currentFunctions.size());
     }
 
     @Override
@@ -67,65 +76,84 @@ public class SketchModScreen extends GuiScreen {
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         super.drawDefaultBackground();
 
-        int adjustedMouseX = mouseX - panX;
-        int adjustedMouseY = mouseY - panY;
+        functionList.drawScreen(mouseX, mouseY, partialTicks);
 
-        functionList.drawScreen(adjustedMouseX, adjustedMouseY, partialTicks);
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(panOffsetX, panOffsetY, 0);
 
         if (dragging != null) {
-            dragging.draw(this, adjustedMouseX - offsetX, adjustedMouseY - offsetY, adjustedMouseX, adjustedMouseY);
+            dragging.x = mouseX - offsetX - panOffsetX;
+            dragging.y = mouseY - offsetY - panOffsetY;
         }
-
 
         for (ModFunction function : currentFunctions) {
-            if (function.equals(dragging)) continue;
-            function.draw(this, function.x + panX, function.y + panY, adjustedMouseX, adjustedMouseY);
+            function.draw(mouseX - panOffsetX, mouseY - panOffsetY, function.x + panOffsetX, function.y + panOffsetY);
 
-            for (Point from : function.from) {
-                for (Point to : from.connections) {
-                    drawConnection(from, to);
+            for (OutputSlot slot : function.getOutputs()) {
+                for (ConnectionLine line : slot.getLines()) {
+                    if (line.input == null || line.output == null) {
+                        KZClient.getLogger().warning(line.input + " / " + line.output);
+                        continue;
+                    }
+                    drawConnection(line.input, line.output);
                 }
             }
-            for (Point to : function.to) {
-                for (Point from : to.connections) {
-                    System.out.println("Drawing connection from (" + from.x + "," + from.y + ") to (" + to.x + "," + to.y + ")");
-                    drawConnection(from, to);
-                }
-            }
-
         }
+
+        GlStateManager.popMatrix();
 
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
 
-    private void drawConnection(Point from, Point to) {
-        for (int i = 0; i < 10; i++) {
-            int x = from.x + (to.x - from.x) / 10 * i;
-            int y = from.y + (to.y - from.y) / 10 * i;
-            Gui.drawRect(x, y, x + 2, y + 2, Color.RED.getRGB());
+    private void drawConnection(InputSlot from, OutputSlot to) {
+        Tessellator tessellator = Tessellator.getInstance();
+        WorldRenderer worldrenderer = tessellator.getWorldRenderer();
+        GlStateManager.disableTexture2D();
+        GlStateManager.enableBlend();
+        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+        GlStateManager.disableAlpha();
+        GlStateManager.shadeModel(7425);
+        worldrenderer.begin(3, DefaultVertexFormats.POSITION_COLOR);
+
+        double steps = 20.0;
+        for (int i = 0; i <= steps; i++) {
+            double t = i / steps;
+            int x = (int) MathHelper.lerp(from.x, to.x, t);
+            int y = (int) MathHelper.lerp(from.y, to.y, t);
+            worldrenderer.pos(x, y, 0).color(255, 0, 0, 255).endVertex();
         }
+
+        tessellator.draw();
+        GlStateManager.shadeModel(7424);
+        GlStateManager.enableAlpha();
+        GlStateManager.disableBlend();
+        GlStateManager.enableTexture2D();
     }
+
 
     @Override
     protected void mouseReleased(int mouseX, int mouseY, int state) {
         super.mouseReleased(mouseX, mouseY, state);
-        if(panning) {
-            panning = false;
-            panX = 0;
-            panY = 0;
+        if (isPanning) {
+            isPanning = false;
+            return;
         }
+
         if (dragging != null) {
-            dragging.x = mouseX - offsetX - panX;
-            dragging.y = mouseY - offsetY - panY;
+            dragging.x = mouseX - offsetX - panOffsetX;
+            dragging.y = mouseY - offsetY - panOffsetY;
             dragging = null;
         } else if (draggingPoint) {
             for (ModFunction function : currentFunctions) {
-                Point pointAtMouse = function.getPointAt(mouseX, mouseY);
-                if (pointAtMouse != null) {
-                    draggingFrom.connections.add(pointAtMouse);
-                    draggingPoint = false;
-                    break;
+                Slot pointAtMouse = function.getSlot(mouseX - panOffsetX, mouseY - panOffsetY);
+                if (pointAtMouse == null) continue;
+
+                if (pointAtMouse instanceof InputSlot) {
+                    draggingFrom.connectInput((InputSlot) pointAtMouse);
+                } else {
+                    draggingFrom.connectOutput((OutputSlot) pointAtMouse);
                 }
+                draggingPoint = false;
             }
         }
     }
@@ -145,45 +173,34 @@ public class SketchModScreen extends GuiScreen {
         lastMouseX = mouseX;
         lastMouseY = mouseY;
 
-        boolean clicked = false;
-        int adjustedMouseX = mouseX - panX;
-        int adjustedMouseY = mouseY - panY;
+        boolean click = false;
         for (ModFunction function : currentFunctions) {
-            function.mouseClicked(adjustedMouseX, adjustedMouseY, mouseButton);
+            function.mouseClicked(mouseX, mouseY, mouseButton);
 
-            Point pointAtMouse = function.getPointAt(mouseX, mouseY);
-            if (pointAtMouse != null) {
-                draggingFrom = pointAtMouse;
+            Slot pointAtMouse = function.getSlot(mouseX - panOffsetX, mouseY - panOffsetY);
+            if (pointAtMouse instanceof OutputSlot) {
+                draggingFrom = (OutputSlot) pointAtMouse;
                 draggingFunction = function;
                 draggingPoint = true;
-                clicked = true;
+                click = true;
                 break;
             }
-            if (function.isMouseOver(adjustedMouseX, adjustedMouseY)) {
+            if (function.isMouseOver(mouseX - panOffsetX, mouseY - panOffsetY)) {
                 dragging = function;
-                offsetX = mouseX - function.x - panX;
-                offsetY = mouseY - function.y - panY;
-                clicked = true;
+                offsetX = mouseX - function.x - panOffsetX;
+                offsetY = mouseY - function.y - panOffsetY;
+                click = true;
                 break;
             }
         }
-        if(!clicked && mouseX > browserWidth) {
-            panning = true;
-            draggingPoint = false;
-        }
-    }
 
-    @Override
-    protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
-        if (panning) {
-            panX = mouseX - lastMouseX;
-            panY = mouseY - lastMouseY;
-
-            lastMouseX = mouseX;
-            lastMouseY = mouseY;
-        } else if (dragging != null) {
-            dragging.x = mouseX - offsetX - panX;
-            dragging.y = mouseY - offsetY - panY;
+        if (!click) {
+            if (mouseButton == 3 && mouseX > browserWidth) {
+                System.out.println("Started panning");
+                isPanning = true;
+                lastPanX = mouseX;
+                lastPanY = mouseY;
+            }
         }
     }
 
@@ -191,6 +208,13 @@ public class SketchModScreen extends GuiScreen {
     public void handleMouseInput() throws IOException {
         functionList.handleMouseInput();
         super.handleMouseInput();
+
+        if (isPanning) {
+            int deltaX = Mouse.getEventDX();
+            int deltaY = Mouse.getEventDY();
+            panOffsetX += deltaX;
+            panOffsetY += deltaY;
+        }
     }
 
     @Override
@@ -198,8 +222,8 @@ public class SketchModScreen extends GuiScreen {
         functionList.actionPerformed(button);
         if (button.id == 0) {
             this.mc.displayGuiScreen(new CreateModScreen(this));
-        } else if(button.id == 1) {
-            if(creating) {
+        } else if (button.id == 1) {
+            if (creating) {
                 Mod mod = new Mod(KZClient.getInstance().getModManager().generateNewModID(), CreateModScreen.NAME, CreateModScreen.AUTHOR, CreateModScreen.VERSION, CreateModScreen.DESCRIPTION);
                 mod.loadFunctions(currentFunctions);
                 KZClient.getInstance().getModManager().loadMod(mod);
@@ -217,7 +241,7 @@ public class SketchModScreen extends GuiScreen {
 
     class ModFunctionElementList extends GuiSlot {
 
-        private final List<ModFunction> functions = Arrays.asList(new StartSprintingEvent(), new SayMessage(), new IsSprinting(), new PreTick(), new StartSprinting());
+        private final List<ModFunction> functions = Arrays.asList(new TestFunction(), new PostMotionFunction(), new SayMessageFunction(), new ChatMessageFunction(), new ContainsFunction());
 
         public ModFunctionElementList(Minecraft mcIn, int width, int height, int topIn, int bottomIn, int slotHeightIn) {
             super(mcIn, width, height, topIn, bottomIn, slotHeightIn);
@@ -231,9 +255,11 @@ public class SketchModScreen extends GuiScreen {
         @Override
         protected void elementClicked(int slotIndex, boolean isDoubleClick, int mouseX, int mouseY) {
             ModFunction function = functions.get(slotIndex)._copy();
-            function.x = 250 - panX;
-            function.y = 100 - panY;
-            function.init();
+            System.out.println("id=" + function.getId());
+            function.x = 250;
+            function.y = 100;
+            function.loadSlots();
+            function.prepare();
             currentFunctions.add(function);
             KZClient.getLogger().info("Added " + function.getClass().getSimpleName());
         }
@@ -250,9 +276,7 @@ public class SketchModScreen extends GuiScreen {
 
         @Override
         protected void drawSlot(int entryID, int p_180791_2_, int p_180791_3_, int p_180791_4_, int mouseXIn, int mouseYIn) {
-            functions.get(entryID).to.clear(); functions.get(entryID).from.clear(); // For display, clear it because #init adds them.
-            functions.get(entryID).init();
-            functions.get(entryID).draw(SketchModScreen.this, 15, p_180791_3_, mouseXIn, p_180791_4_);
+            functions.get(entryID).drawForDisplay(mouseXIn, p_180791_4_, 15, p_180791_3_);
         }
 
         @Override
@@ -321,20 +345,20 @@ public class SketchModScreen extends GuiScreen {
                 if (Mouse.getEventButton() == 0 && Mouse.getEventButtonState() && this.mouseY >= this.top && this.mouseY <= this.bottom) {
                     int i = (this.width - this.getListWidth()) / 2;
                     int j = (this.width + this.getListWidth()) / 2;
-                    int k = this.mouseY - this.top - this.headerPadding + (int)this.amountScrolled - 4;
+                    int k = this.mouseY - this.top - this.headerPadding + (int) this.amountScrolled - 4;
                     int l = k / this.slotHeight;
 
                     if (l < this.getSize() && this.mouseX >= i && this.mouseX <= j && l >= 0 && k >= 0) {
                         this.elementClicked(l, false, this.mouseX, this.mouseY);
                         this.selectedElement = l;
                     } else if (this.mouseX >= i && this.mouseX <= j && k < 0) {
-                        this.func_148132_a(this.mouseX - i, this.mouseY - this.top + (int)this.amountScrolled - 4);
+                        this.func_148132_a(this.mouseX - i, this.mouseY - this.top + (int) this.amountScrolled - 4);
                     }
                 }
 
                 int scrollAmount = Mouse.getEventDWheel();
                 if (scrollAmount != 0) {
-                    this.amountScrolled += (float)(scrollAmount > 0 ? -1 : 1) * this.slotHeight / 2;
+                    this.amountScrolled += (float) (scrollAmount > 0 ? -1 : 1) * this.slotHeight / 2;
                 }
             }
         }

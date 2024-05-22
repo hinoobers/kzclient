@@ -1,5 +1,6 @@
 package kzclient.gui.mod;
 
+import kzclient.KZClient;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiLabel;
 import net.minecraft.client.gui.GuiScreen;
@@ -132,7 +133,9 @@ public class CreateModScreen extends GuiScreen {
             error = "Version cannot be empty";
         } else if(descriptionField.getText().isEmpty()) {
             error = "Description cannot be empty";
-        } else {
+        } else if(KZClient.getInstance().getModManager().getMods().stream().anyMatch(s -> s.getName().equals(this.nameField.getText()))) {
+            error = "Mod with that name already exists";
+         } else {
             error = null;
         }
     }

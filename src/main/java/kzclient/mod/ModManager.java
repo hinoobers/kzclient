@@ -28,6 +28,7 @@ public class ModManager {
                 try {
                     loadMod(file);
                 } catch(Exception e){
+                    e.printStackTrace();
                     KZClient.getLogger().severe("Failed to load mod: " + file.getName());
                 }
             }
